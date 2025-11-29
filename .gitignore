@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Virtual Environment
+venv/
+.venv/
+
+# Database
+# This is the actual SQLite file created by your application
+todo.db
+test_isolated_todo.db
