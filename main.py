@@ -22,7 +22,7 @@ def get_current_user_id() -> str:
     Simulates getting the ID of the currently authenticated user.
     """
     # Hardcoded user ID for demonstration
-    return "user-A-123" 
+    return "user-A-123"
 
 # --- Rate Limiter Key Function (FIXED to use User ID) ---
 async def rate_limit_key_generator(request: Request) -> str:
@@ -38,27 +38,27 @@ async def rate_limit_key_generator(request: Request) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handles startup and shutdown events, including Redis and Rate Limiter setup."""
-    
+
     # 1. Initialize Redis connection
     try:
         # !!! PORT CHANGED TO 6380 TO AVOID CONFLICT WITH SYSTEM REDIS SERVICE !!!
         redis_conn = Redis(host="localhost", port=6380, db=0)
-        
+
         # 2. Initialize the Rate Limiter using the Redis connection
         await FastAPILimiter.init(
             redis_conn,
             identifier=rate_limit_key_generator
         )
         print("FastAPILimiter initialized, connecting to Redis on localhost:6380.")
-        
+
     except Exception as e:
         # This will be logged if Redis is not running or unreachable
         print(f"WARNING: Could not connect to Redis for Rate Limiter (port 6380). Rate limiting disabled. Error: {e}")
-        
+
     print("Application started. Database connection ready (schema managed by Alembic).")
 
     yield
-    
+
     print("Application shutting down.")
 
 # Initialize the FastAPI application using the lifespan handler
@@ -66,7 +66,7 @@ app = FastAPI(
     title="WSL ToDo REST API (Rate Limited)",
     description="A ToDo list backend with FastAPI, SQLite/Alembic, and Rate Limiting via Redis.",
     version="4.0.0",
-    lifespan=lifespan 
+    lifespan=lifespan
 )
 
 # Dependency to get the database connection
@@ -92,15 +92,15 @@ async def validation_exception_handler(request, exc):
 
 # CREATE - RATE LIMITED
 @app.post(
-    "/tasks/", 
-    response_model=models.Task, 
-    status_code=status.HTTP_201_CREATED, 
+    "/tasks/",
+    response_model=models.Task,
+    status_code=status.HTTP_201_CREATED,
     tags=["Tasks"],
     # Apply rate limit: 5 requests every 10 seconds per user
-    dependencies=[Depends(RateLimiter(times=5, seconds=10, identifier=rate_limit_key_generator))] 
+    dependencies=[Depends(RateLimiter(times=5, seconds=10, identifier=rate_limit_key_generator))]
 )
 def create_new_task(
-    task_data: models.TaskCreate, 
+    task_data: models.TaskCreate,
     user_id: str = Depends(get_current_user_id),
     db: sqlite3.Connection = Depends(get_db)
 ):
@@ -120,13 +120,13 @@ def read_all_tasks(
     db: sqlite3.Connection = Depends(get_db)
 ):
     """Retrieves a list of all tasks for the current user."""
-    tasks = database.get_all_tasks(db, user_id, is_done, search) 
+    tasks = database.get_all_tasks(db, user_id, is_done, search)
     return tasks
 
 # READ One
 @app.get("/tasks/{task_id}", response_model=models.Task, tags=["Tasks"])
 def read_single_task(
-    task_id: int, 
+    task_id: int,
     user_id: str = Depends(get_current_user_id),
     db: sqlite3.Connection = Depends(get_db)
 ):
@@ -134,20 +134,20 @@ def read_single_task(
     task = database.get_task_by_id(db, task_id, user_id)
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task with ID {task_id} not found for user {user_id}")
-    
+
     return models.Task(**task)
 
 # UPDATE
 @app.put("/tasks/{task_id}", response_model=models.Task, tags=["Tasks"])
 def update_existing_task(
-    task_id: int, 
-    task_data: models.TaskUpdate, 
+    task_id: int,
+    task_data: models.TaskUpdate,
     user_id: str = Depends(get_current_user_id),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """Updates an existing task, only if it belongs to the current user."""
     updates = task_data.model_dump(exclude_none=True)
-    
+
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields provided for update.")
 
@@ -156,7 +156,7 @@ def update_existing_task(
     if not success:
         if database.get_task_by_id(db, task_id, user_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task with ID {task_id} not found for user {user_id}")
-        
+
         updated_task = database.get_task_by_id(db, task_id, user_id)
         return models.Task(**updated_task)
 
@@ -167,16 +167,16 @@ def update_existing_task(
 # DELETE
 @app.delete("/tasks/{task_id}", response_model=models.DeleteResponse, tags=["Tasks"])
 def delete_task_by_id(
-    task_id: int, 
+    task_id: int,
     user_id: str = Depends(get_current_user_id),
     db: sqlite3.Connection = Depends(get_db)
 ):
     """Deletes a task by its ID, only if it belongs to the current user."""
     success = database.delete_task(db, task_id, user_id)
-    
+
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task with ID {task_id} not found for user {user_id}")
-        
+
     return models.DeleteResponse(message=f"Task {task_id} deleted successfully.", task_id=task_id)
 
 # Optional: Run the app directly from this file (useful for testing)
